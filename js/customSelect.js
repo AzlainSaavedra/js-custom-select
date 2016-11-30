@@ -50,7 +50,7 @@
 		searchDelay: 300
 	});
 
-	module.directive('customSelect', ['$parse', '$compile', '$timeout', '$q', 'customSelectDefaults', function ($parse, $compile, $timeout, $q, baseOptions) {
+	module.directive('customSelect', ['$parse', '$compile', '$timeout', '$q', 'customSelectDefaults', '$filter', function ($parse, $compile, $timeout, $q, baseOptions, $filter) {
 		var CS_OPTIONS_REGEXP = /^\s*(.*?)(?:\s+as\s+(.*?))?\s+for\s+(?:([\$\w][\$\w\d]*))\s+in\s+([\s\S]+?)(?:\s+track\s+by\s+([\s\S]+?))?$/;
 
 		return {
@@ -227,18 +227,46 @@
 				childScope.$watch(function () { return elem.attr('disabled'); }, function (value) {
 					childScope.disabled = value;
 				});
+				
+				var originalDataSet = []:
+				
+				//Method to filter locally
+				function filterLocally(term, dataset){
+					var filteredData = $filter('filter')(dataset, term);
+					return filteredData;
+				}
+				
+				childScope.$watch('searchTerm', function (newValue, oldValue) {
+					if(newValue && oldValue){
+						var arrTermNew  = newValue.split(" ");
+						var arrTermOld  = oldValue.split(" ");
+						var changedTerm = true;
 
-				childScope.$watch('searchTerm', function (newValue) {
-					if (timeoutHandle) {
-						$timeout.cancel(timeoutHandle);
+						for(var i in arrTermNew){
+							if(arrTermNew[i] && arrTermOld[i] && arrTermNew[i] == arrTermOld[i]){
+								changedTerm = false;
+								break;
+							}
+						}
+
+
+						if (timeoutHandle) {
+							$timeout.cancel(timeoutHandle);
+						}
+
+						var term = (newValue || '').trim();
+						timeoutHandle = $timeout(function () {
+
+								if(changedTerm){
+									getMatches(term);
+								}else{
+									childScope.matches = filterLocally(term, originalDataSet)
+								}
+							},
+							// If empty string, do not delay
+							(term && options.searchDelay) || 0);
+
 					}
-
-					var term = (newValue || '').trim();
-					timeoutHandle = $timeout(function () {
-						getMatches(term);
-					},
-					// If empty string, do not delay
-					(term && options.searchDelay) || 0);
 				});
 
 				// Support for autofocus
@@ -314,7 +342,7 @@
 
 								childScope.matches.push(matches[i]);
 							}
-							//childScope.matches = matches;
+							originalDataSet = childScope.matches;
 						}
 
 						if (needsDisplayText) setDisplayText();
